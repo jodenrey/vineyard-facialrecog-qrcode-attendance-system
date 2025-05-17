@@ -65,18 +65,62 @@ export function LoginForm() {
     }
   };
 
-  const handleFaceLogin = (role: string) => {
-    // In a real app, this would verify the face against the database
-    // For demo purposes, we redirect based on role
-    toast({
-      title: "Success",
-      description: `${role} login successful via facial recognition`,
-    });
-    
-    if (role === 'teacher') {
-      router.push('/dashboard/teacher');
-    } else {
-      router.push('/dashboard/student');
+  const handleFaceLogin = async (userId: string) => {
+    try {
+      // Get user data from API
+      const response = await fetch(`/api/users/${userId}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Special handling for "user not found" case - likely due to deletion
+          toast({
+            variant: "destructive",
+            title: "Account Not Found",
+            description: "The account linked to this face no longer exists. Please contact an administrator.",
+          });
+          
+          // Attempt to clean up the stale facial recognition data
+          try {
+            await fetch(`/api/face/delete/${userId}`, {
+              method: 'DELETE',
+            });
+            console.log("Attempted to clean up stale facial recognition data");
+          } catch (cleanupError) {
+            console.error("Failed to clean up stale facial recognition data:", cleanupError);
+          }
+          
+          return;
+        }
+        
+        throw new Error('Failed to fetch user data');
+      }
+      
+      // Check if userData.user exists
+      const userData = await response.json();
+      if (!userData.user || !userData.user.role) {
+        throw new Error('Invalid user data received from server');
+      }
+      
+      toast({
+        title: "Success",
+        description: `${userData.user.role.toLowerCase()} login successful via facial recognition`,
+      });
+      
+      // Redirect based on role
+      if (userData.user.role === 'ADMIN') {
+        router.push('/dashboard/admin');
+      } else if (userData.user.role === 'TEACHER') {
+        router.push('/dashboard/teacher');
+      } else {
+        router.push('/dashboard/student');
+      }
+    } catch (error) {
+      console.error("Error during face login:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to complete login after face recognition.",
+      });
     }
   };
 
@@ -135,7 +179,10 @@ export function LoginForm() {
       </TabsContent>
       
       <TabsContent value="facial" className="space-y-4">
-        <FacialRecognition onRecognized={handleFaceLogin} />
+        <FacialRecognition
+          mode="recognition"
+          onRecognized={handleFaceLogin}
+        />
         
         <p className="text-sm text-muted-foreground text-center">
           Position your face within the frame for recognition

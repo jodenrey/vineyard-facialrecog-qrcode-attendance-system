@@ -80,6 +80,7 @@ export function UsersManagement() {
     email: "",
     role: "STUDENT",
     password: "",
+    confirmPassword: "",
     classId: "",
   });
   const [faceRegistered, setFaceRegistered] = useState(false);
@@ -87,6 +88,11 @@ export function UsersManagement() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isEditUserOpen, setIsEditUserOpen] = useState(false);
   const [isDeleteUserOpen, setIsDeleteUserOpen] = useState(false);
+  const [createdUserId, setCreatedUserId] = useState<string | null>(null);
+  const [faceRegistrationStep, setFaceRegistrationStep] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [editFaceRegistered, setEditFaceRegistered] = useState(false);
 
   // Fetch users and classes from the database
   useEffect(() => {
@@ -150,30 +156,78 @@ export function UsersManagement() {
         return;
       }
 
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newUser),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to create user');
+      // Check if passwords match
+      if (newUser.password !== newUser.confirmPassword) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Passwords do not match",
+        });
+        return;
       }
 
-      const data = await response.json();
-      setUsers([...users, data.user]);
+      // If we're in the face registration step and no face was registered, show a warning
+      if (faceRegistrationStep && !faceRegistered) {
+        toast({
+          variant: "destructive",
+          title: "Warning",
+          description: "Face not registered. User will be created without facial recognition.",
+        });
+      }
+
+      // Remove confirmPassword before sending to API
+      const { confirmPassword, ...userDataToSend } = newUser;
+
+      // If we haven't created the user yet
+      if (!faceRegistrationStep) {
+        const response = await fetch('/api/users', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(userDataToSend),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.message || 'Failed to create user');
+        }
+
+        const data = await response.json();
+        setCreatedUserId(data.user.id);
+        
+        // If facial recognition is to be set up, go to the next step
+        setFaceRegistrationStep(true);
+        return;
+      }
+
+      // Otherwise, we've already created the user and possibly registered the face
+      // Refresh the users list to include the new user
+      try {
+        const refreshResponse = await fetch('/api/users');
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          setUsers(refreshData.users);
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing users:', refreshError);
+      }
+
+      // Reset the form
       setIsAddUserOpen(false);
       setNewUser({
         name: "",
         email: "",
         role: "STUDENT",
         password: "",
+        confirmPassword: "",
         classId: "",
       });
       setFaceRegistered(false);
+      setFaceRegistrationStep(false);
+      setCreatedUserId(null);
+      setShowPassword(false);
+      setShowConfirmPassword(false);
 
       toast({
         title: "Success",
@@ -228,6 +282,25 @@ export function UsersManagement() {
     if (!selectedUser) return;
 
     try {
+      // First try to delete the facial recognition data
+      try {
+        const faceResponse = await fetch(`/api/face/delete/${selectedUser.id}`, {
+          method: 'DELETE',
+        });
+        
+        // We don't need to check the response - continue even if this fails
+        // Just log it for debugging
+        if (!faceResponse.ok) {
+          console.log(`Note: Could not delete facial recognition data for user: ${selectedUser.id}`);
+        } else {
+          console.log(`Successfully deleted facial recognition data for user: ${selectedUser.id}`);
+        }
+      } catch (faceError) {
+        console.error('Error deleting facial recognition data:', faceError);
+        // Continue with user deletion even if face deletion fails
+      }
+
+      // Now delete the user account
       const response = await fetch(`/api/users/${selectedUser.id}`, {
         method: 'DELETE',
       });
@@ -329,13 +402,62 @@ export function UsersManagement() {
                   
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input 
-                      id="password" 
-                      type="password" 
-                      value={newUser.password}
-                      onChange={e => setNewUser({...newUser, password: e.target.value})}
-                      placeholder="Enter password" 
-                    />
+                    <div className="relative">
+                      <Input 
+                        id="password" 
+                        type={showPassword ? "text" : "password"}
+                        value={newUser.password}
+                        onChange={e => setNewUser({...newUser, password: e.target.value})}
+                        placeholder="Enter password" 
+                      />
+                      <button 
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+                    <div className="relative">
+                      <Input 
+                        id="confirmPassword" 
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={newUser.confirmPassword}
+                        onChange={e => setNewUser({...newUser, confirmPassword: e.target.value})}
+                        placeholder="Confirm password" 
+                      />
+                      <button 
+                        type="button"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {newUser.role === "STUDENT" && (
@@ -362,34 +484,51 @@ export function UsersManagement() {
               </TabsContent>
               
               <TabsContent value="face">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Register Face</CardTitle>
-                    <CardDescription>
-                      Capture a clear image of the user's face for recognition
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <FacialRecognition 
-                      onRecognized={() => setFaceRegistered(true)} 
-                    />
-                  </CardContent>
-                  <CardFooter className="justify-between">
-                    <div>
-                      {faceRegistered ? (
-                        <p className="text-sm text-green-500">Face registered successfully!</p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">Face not yet registered</p>
-                      )}
-                    </div>
-                  </CardFooter>
-                </Card>
+                {createdUserId ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Register Face</CardTitle>
+                      <CardDescription>
+                        Capture a clear image of the user's face for recognition
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <FacialRecognition 
+                        mode="registration"
+                        userId={createdUserId}
+                        onRecognized={() => setFaceRegistered(true)} 
+                      />
+                    </CardContent>
+                    <CardFooter className="justify-between">
+                      <div>
+                        {faceRegistered ? (
+                          <p className="text-sm text-green-500">Face registered successfully!</p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Face not yet registered</p>
+                        )}
+                      </div>
+                    </CardFooter>
+                  </Card>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-muted-foreground">Please create the user first before registering a face</p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
             
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddUserOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddUser}>Add User</Button>
+              <Button variant="outline" onClick={() => {
+                setIsAddUserOpen(false);
+                setFaceRegistrationStep(false);
+                setCreatedUserId(null);
+                setFaceRegistered(false);
+              }}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddUser}>
+                {faceRegistrationStep ? "Complete Registration" : "Create User"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -505,18 +644,37 @@ export function UsersManagement() {
                             
                             <div className="space-y-2">
                               <Label htmlFor="edit-password">Password</Label>
-                              <Input 
-                                id="edit-password" 
-                                type="password" 
-                                placeholder="New password (leave empty to keep current)"
-                                onChange={e => {
-                                  const updatedUser = { ...selectedUser };
-                                  if (selectedUser) {
-                                    updatedUser.password = e.target.value;
-                                    setSelectedUser(updatedUser);
-                                  }
-                                }}
-                              />
+                              <div className="relative">
+                                <Input 
+                                  id="edit-password" 
+                                  type={showPassword ? "text" : "password"}
+                                  placeholder="New password (leave empty to keep current)"
+                                  onChange={e => {
+                                    const updatedUser = { ...selectedUser };
+                                    if (selectedUser) {
+                                      updatedUser.password = e.target.value;
+                                      setSelectedUser(updatedUser);
+                                    }
+                                  }}
+                                />
+                                <button 
+                                  type="button"
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                  onClick={() => setShowPassword(!showPassword)}
+                                >
+                                  {showPassword ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                                      <line x1="1" y1="1" x2="23" y2="23" />
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                      <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
                             </div>
 
                             {selectedUser.role === "STUDENT" && (
@@ -539,8 +697,72 @@ export function UsersManagement() {
                                 </Select>
                               </div>
                             )}
+
+                            <div className="space-y-2 col-span-2 mt-4">
+                              <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                  if (selectedUser) {
+                                    // Toggle facial recognition card/dialog
+                                    setEditFaceRegistered(false); // Reset the state
+                                    
+                                    // Navigate to the facial recognition tab by clicking the button
+                                    document.getElementById("facial-recognition-tab")?.click();
+                                  }
+                                }}
+                              >
+                                Update Facial Recognition
+                              </Button>
+                            </div>
                           </div>
                         )}
+                        
+                        <Tabs defaultValue="details" className="mt-6">
+                          <TabsList className="grid w-full grid-cols-2">
+                            <TabsTrigger value="details">User Details</TabsTrigger>
+                            <TabsTrigger 
+                              id="facial-recognition-tab"
+                              value="facial-recognition"
+                              disabled={!selectedUser || !selectedUser.id}
+                            >
+                              Facial Recognition
+                            </TabsTrigger>
+                          </TabsList>
+
+                          <TabsContent value="details">
+                            {/* Details content is now handled above */}
+                          </TabsContent>
+
+                          <TabsContent value="facial-recognition">
+                            {selectedUser && selectedUser.id && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>Update Face Recognition</CardTitle>
+                                  <CardDescription>
+                                    Register or update facial recognition for this user
+                                  </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                  <FacialRecognition 
+                                    mode="registration"
+                                    userId={selectedUser.id}
+                                    onRecognized={() => setEditFaceRegistered(true)}
+                                  />
+                                </CardContent>
+                                <CardFooter>
+                                  {editFaceRegistered ? (
+                                    <p className="text-sm text-green-500">Face registered successfully!</p>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                      Position your face within the frame and click "Register Face"
+                                    </p>
+                                  )}
+                                </CardFooter>
+                              </Card>
+                            )}
+                          </TabsContent>
+                        </Tabs>
                         
                         <DialogFooter>
                           <Button variant="outline" onClick={() => setIsEditUserOpen(false)}>Cancel</Button>

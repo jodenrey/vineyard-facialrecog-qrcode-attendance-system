@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+numpy
+insightface
+onnxruntime
+opencv-python
+python-jose
+passlib
+python-dotenv
+pydantic
+pillow
+psycopg2-binary
+requests
