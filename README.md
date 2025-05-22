@@ -6,7 +6,7 @@ A modern, full-stack school attendance management system with facial recognition
 
 ## Features
 
-- **Facial Recognition**: Secure authentication and attendance tracking using InsightFace
+- **Dual-Factor Biometric Authentication**: Secure login using both facial recognition and QR code scanning
 - **Role-Based Access Control**: Dedicated dashboards for administrators, teachers, and students
 - **Real-time Attendance Tracking**: Track student attendance with status options (present, absent, late)
 - **User Management**: Create, update, and delete users with different roles
@@ -155,7 +155,9 @@ VineyardAcademyAttendanceSystem/
 
 ### Authentication
 - POST `/api/auth/login`: User login with email/password
-- POST `/api/face/recognize`: Facial recognition login
+- POST `/api/auth/verify-biometric`: Verify both face and QR code match the same user
+- POST `/api/auth/verify-qr`: Verify QR code authentication
+- POST `/api/face/recognize`: Facial recognition authentication
 
 ### Users
 - GET `/api/users`: List all users
@@ -182,6 +184,17 @@ VineyardAcademyAttendanceSystem/
 - POST `/api/face/register`: Register a user's face
 - POST `/api/face/recognize`: Recognize a face
 - DELETE `/api/face/delete/:userId`: Delete a user's face recognition data
+
+## Security Features
+
+### Two-Factor Biometric Authentication
+The system implements a secure two-factor biometric authentication mechanism:
+
+1. **Step 1**: Facial recognition scan verifies the user's identity using InsightFace
+2. **Step 2**: QR code scan provides a second authentication factor
+3. **Verification**: Both factors must match the same user account
+
+This provides significantly stronger security than either method alone, protecting against both facial recognition spoofing and QR code theft.
 
 ## License
 

@@ -16,6 +16,9 @@ export async function GET(request: Request, { params }: Params) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: params.id },
+      include: {
+        class: true,
+      }
     });
 
     if (!user) {
@@ -42,7 +45,7 @@ export async function GET(request: Request, { params }: Params) {
 export async function PUT(request: Request, { params }: Params) {
   try {
     const body = await request.json();
-    const { name, email, role, password, classId } = body;
+    const { name, email, role, password, classId, qrCode } = body;
 
     // Validate required fields
     if (!name || !email || !role) {
@@ -102,6 +105,11 @@ export async function PUT(request: Request, { params }: Params) {
     // Only update password if a new one is provided
     if (password) {
       data.password = await hash(password, 10);
+    }
+
+    // Update QR code if provided
+    if (qrCode !== undefined) {
+      data.qrCode = qrCode;
     }
 
     // Update the user

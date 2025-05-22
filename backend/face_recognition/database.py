@@ -16,7 +16,6 @@ class Database:
     def __init__(self):
         self.conn = None
         self.cursor = None
-        self.setup_database()
 
     def connect(self):
         """Connect to the PostgreSQL database using DATABASE_URL"""
@@ -27,28 +26,6 @@ class Database:
         except Exception as e:
             print(f"Connection error: {e}")
             return False
-
-    def setup_database(self):
-        """Create tables if they don't exist"""
-        if self.connect():
-            try:
-                self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS face_embeddings (
-                    id SERIAL PRIMARY KEY,
-                    user_id VARCHAR(50) UNIQUE NOT NULL,
-                    embedding JSONB NOT NULL,
-                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                """)
-                self.conn.commit()
-                return True
-            except Exception as e:
-                print(f"Database setup error: {e}")
-                return False
-            finally:
-                self.close()
-        return False
 
     def close(self):
         """Close database connection"""
@@ -61,28 +38,35 @@ class Database:
         """Save or update a face embedding for a user"""
         if self.connect():
             try:
+                # Check if embedding already exists
                 self.cursor.execute(
-                    "SELECT user_id FROM face_embeddings WHERE user_id = %s",
+                    """
+                    SELECT "userId" FROM "FaceEmbedding" WHERE "userId" = %s
+                    """,
                     (user_id,)
                 )
                 existing = self.cursor.fetchone()
 
+                embedding_json = json.dumps(embedding)
+
                 if existing:
+                    # Update existing embedding
                     self.cursor.execute(
                         """
-                        UPDATE face_embeddings 
-                        SET embedding = %s, updated_at = CURRENT_TIMESTAMP 
-                        WHERE user_id = %s
+                        UPDATE "FaceEmbedding"
+                        SET embedding = %s, "updatedAt" = CURRENT_TIMESTAMP 
+                        WHERE "userId" = %s
                         """,
-                        (json.dumps(embedding), user_id)
+                        (embedding_json, user_id)
                     )
                 else:
+                    # Create new embedding
                     self.cursor.execute(
                         """
-                        INSERT INTO face_embeddings (user_id, embedding) 
-                        VALUES (%s, %s)
+                        INSERT INTO "FaceEmbedding" (id, "userId", embedding, "createdAt", "updatedAt")
+                        VALUES (gen_random_uuid(), %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                         """,
-                        (user_id, json.dumps(embedding))
+                        (user_id, embedding_json)
                     )
                 self.conn.commit()
                 return True
@@ -98,10 +82,13 @@ class Database:
         """Get all face embeddings"""
         if self.connect():
             try:
-                self.cursor.execute("SELECT user_id, embedding FROM face_embeddings")
+                self.cursor.execute("""
+                    SELECT "userId", embedding 
+                    FROM "FaceEmbedding"
+                """)
                 rows = self.cursor.fetchall()
                 return [
-                    {"user_id": row["user_id"], "embedding": row["embedding"]}
+                    {"user_id": row["userId"], "embedding": json.loads(row["embedding"])}
                     for row in rows
                 ]
             except Exception as e:
@@ -116,12 +103,16 @@ class Database:
         if self.connect():
             try:
                 self.cursor.execute(
-                    "SELECT embedding FROM face_embeddings WHERE user_id = %s",
+                    """
+                    SELECT embedding 
+                    FROM "FaceEmbedding" 
+                    WHERE "userId" = %s
+                    """,
                     (user_id,)
                 )
                 result = self.cursor.fetchone()
                 if result:
-                    return {"user_id": user_id, "embedding": result["embedding"]}
+                    return {"user_id": user_id, "embedding": json.loads(result["embedding"])}
                 return None
             except Exception as e:
                 print(f"Error retrieving embedding: {e}")
@@ -135,7 +126,10 @@ class Database:
         if self.connect():
             try:
                 self.cursor.execute(
-                    "DELETE FROM face_embeddings WHERE user_id = %s",
+                    """
+                    DELETE FROM "FaceEmbedding" 
+                    WHERE "userId" = %s
+                    """,
                     (user_id,)
                 )
                 self.conn.commit()

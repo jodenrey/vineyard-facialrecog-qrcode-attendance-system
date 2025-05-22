@@ -7,7 +7,11 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "postinstall": "PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x prisma generate --schema=prisma/schema.prisma && npm audit fix --force"
+        "postinstall": "PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x prisma generate --schema=prisma/schema.prisma && npm audit fix --force",
+        "seed": "npx ts-node --compiler-options {\\\"module\\\":\\\"CommonJS\\\"} prisma/seed.ts"
+    },
+    "prisma": {
+        "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
     },
     "dependencies": {
         "@hookform/resolvers": "^3.9.0",
@@ -53,6 +57,7 @@
         "eslint": "8.49.0",
         "eslint-config-next": "13.5.1",
         "exceljs": "^4.4.0",
+        "html5-qrcode": "^2.3.8",
         "input-otp": "^1.2.4",
         "jspdf": "^3.0.1",
         "jspdf-autotable": "^5.0.2",
@@ -61,6 +66,7 @@
         "next-auth": "^4.24.5",
         "next-themes": "^0.3.0",
         "postcss": "^8.5.3",
+        "qrcode.react": "^4.2.0",
         "react": "18.2.0",
         "react-day-picker": "^8.10.1",
         "react-dom": "18.2.0",
@@ -73,11 +79,14 @@
         "tailwindcss": "3.3.3",
         "tailwindcss-animate": "^1.0.7",
         "typescript": "5.2.2",
+        "uuid": "^11.1.0",
         "vaul": "^0.9.9",
         "zod": "^3.23.8"
     },
     "devDependencies": {
         "@types/bcrypt": "^5.0.2",
-        "prisma": "^6.8.1"
+        "@types/uuid": "^10.0.0",
+        "prisma": "^6.8.1",
+        "ts-node": "^10.9.2"
     }
 }

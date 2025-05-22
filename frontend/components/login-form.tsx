@@ -9,7 +9,8 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { FacialRecognition } from '@/components/facial-recognition';
-import { School, User, KeyRound } from 'lucide-react';
+import { QRCodeScanner } from '@/components/qr-code-scanner';
+import { School, User, KeyRound, QrCode, Shield, Check, ChevronRight } from 'lucide-react';
 
 export function LoginForm() {
   const router = useRouter();
@@ -17,6 +18,9 @@ export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [recognizedUserId, setRecognizedUserId] = useState<string | null>(null);
+  const [qrScannedUserId, setQrScannedUserId] = useState<string | null>(null);
+  const [biometricStep, setBiometricStep] = useState<'face' | 'qr'>('face');
 
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,33 +69,76 @@ export function LoginForm() {
     }
   };
 
-  const handleFaceLogin = async (userId: string) => {
+  const handleFaceRecognized = (userId: string) => {
+    setRecognizedUserId(userId);
+    setBiometricStep('qr');
+    toast({
+      title: "Face Recognized",
+      description: "Now please scan your QR code to complete login",
+    });
+  };
+
+  const handleQRScanned = async (userId: string) => {
+    setQrScannedUserId(userId);
+    
+    // Verify that QR code and face belong to the same user
+    if (recognizedUserId) {
+      try {
+        const response = await fetch('/api/auth/verify-biometric', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            faceUserId: recognizedUserId,
+            qrUserId: userId 
+          }),
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.valid) {
+          completeBiometricLogin(result.userId);
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Authentication Failed",
+            description: result.message || "Face and QR code don't match the same user",
+          });
+          // Reset the biometric flow
+          resetBiometricAuth();
+        }
+      } catch (error) {
+        console.error("Biometric verification error:", error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to verify biometric authentication",
+        });
+        resetBiometricAuth();
+      }
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Authentication Failed",
+        description: "Face recognition required before QR code scan",
+      });
+      resetBiometricAuth();
+    }
+  };
+
+  const resetBiometricAuth = () => {
+    setRecognizedUserId(null);
+    setQrScannedUserId(null);
+    setBiometricStep('face');
+  };
+
+  const completeBiometricLogin = async (userId: string) => {
     try {
       // Get user data from API
       const response = await fetch(`/api/users/${userId}`);
       
       if (!response.ok) {
-        if (response.status === 404) {
-          // Special handling for "user not found" case - likely due to deletion
-          toast({
-            variant: "destructive",
-            title: "Account Not Found",
-            description: "The account linked to this face no longer exists. Please contact an administrator.",
-          });
-          
-          // Attempt to clean up the stale facial recognition data
-          try {
-            await fetch(`/api/face/delete/${userId}`, {
-              method: 'DELETE',
-            });
-            console.log("Attempted to clean up stale facial recognition data");
-          } catch (cleanupError) {
-            console.error("Failed to clean up stale facial recognition data:", cleanupError);
-          }
-          
-          return;
-        }
-        
         throw new Error('Failed to fetch user data');
       }
       
@@ -103,7 +150,7 @@ export function LoginForm() {
       
       toast({
         title: "Success",
-        description: `${userData.user.role.toLowerCase()} login successful via facial recognition`,
+        description: `${userData.user.role.toLowerCase()} login successful via biometric authentication`,
       });
       
       // Redirect based on role
@@ -115,12 +162,13 @@ export function LoginForm() {
         router.push('/dashboard/student');
       }
     } catch (error) {
-      console.error("Error during face login:", error);
+      console.error("Error during biometric login:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to complete login after face recognition.",
+        description: "Failed to complete login after biometric authentication.",
       });
+      resetBiometricAuth();
     }
   };
 
@@ -131,9 +179,9 @@ export function LoginForm() {
           <KeyRound className="h-4 w-4" />
           Manual Login
         </TabsTrigger>
-        <TabsTrigger value="facial" className="flex items-center gap-2">
-          <User className="h-4 w-4" />
-          Facial Login
+        <TabsTrigger value="biometric" className="flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          Biometric Login
         </TabsTrigger>
       </TabsList>
       
@@ -178,15 +226,57 @@ export function LoginForm() {
         </div>
       </TabsContent>
       
-      <TabsContent value="facial" className="space-y-4">
-        <FacialRecognition
-          mode="recognition"
-          onRecognized={handleFaceLogin}
-        />
+      <TabsContent value="biometric" className="space-y-4">
+        <div className="bg-muted/50 p-3 rounded-md mb-4 text-sm text-center">
+          <p className="font-medium mb-1">Two-Factor Biometric Authentication</p>
+          <p className="text-muted-foreground">Complete both face recognition and QR code scan to login securely</p>
+        </div>
         
-        <p className="text-sm text-muted-foreground text-center">
-          Position your face within the frame for recognition
-        </p>
+        <div className="flex items-center justify-between mb-6">
+          <div className={`flex flex-col items-center ${biometricStep === 'face' ? 'text-primary' : 'text-primary/70'}`}>
+            <div className={`w-10 h-10 rounded-full ${biometricStep === 'face' ? 'bg-primary' : recognizedUserId ? 'bg-green-500' : 'bg-muted'} flex items-center justify-center text-white mb-2`}>
+              {recognizedUserId ? <Check className="h-5 w-5" /> : <User className="h-5 w-5" />}
+            </div>
+            <span className="text-xs font-medium">Face Scan</span>
+          </div>
+
+          <ChevronRight className="h-5 w-5 text-muted-foreground" />
+
+          <div className={`flex flex-col items-center ${biometricStep === 'qr' ? 'text-primary' : 'text-muted-foreground'}`}>
+            <div className={`w-10 h-10 rounded-full ${biometricStep === 'qr' ? 'bg-primary' : qrScannedUserId ? 'bg-green-500' : 'bg-muted'} flex items-center justify-center text-white mb-2`}>
+              {qrScannedUserId ? <Check className="h-5 w-5" /> : <QrCode className="h-5 w-5" />}
+            </div>
+            <span className="text-xs font-medium">QR Code</span>
+          </div>
+        </div>
+
+        {biometricStep === 'face' ? (
+          <>
+            <FacialRecognition
+              mode="recognition"
+              onRecognized={handleFaceRecognized}
+            />
+            <p className="text-sm text-muted-foreground text-center">
+              First, position your face within the frame for recognition
+            </p>
+          </>
+        ) : (
+          <>
+            <QRCodeScanner
+              onScanSuccess={handleQRScanned}
+            />
+            <p className="text-sm text-muted-foreground text-center">
+              Now, scan your QR code to complete login
+            </p>
+            <Button 
+              variant="outline" 
+              className="w-full mt-2"
+              onClick={resetBiometricAuth}
+            >
+              Start Over
+            </Button>
+          </>
+        )}
       </TabsContent>
     </Tabs>
   );

@@ -40,7 +40,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { FacialRecognition } from "@/components/facial-recognition";
-import { UserPlus, Pencil, Trash2, Search, Loader2 } from "lucide-react";
+import { QRCodeGenerator } from "@/components/qr-code-generator";
+import { UserPlus, Pencil, Trash2, Search, Loader2, QrCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { hash } from "bcrypt";
 
@@ -59,6 +60,7 @@ interface User {
   createdAt: Date;
   updatedAt: Date;
   password?: string; // Make password optional for updates
+  qrCode?: string;
 }
 
 // Class interface
@@ -68,31 +70,7 @@ interface ClassOption {
   section: string;
 }
 
-export function UsersManagement() {
-  const { toast } = useToast();
-  const [users, setUsers] = useState<User[]>([]);
-  const [classes, setClasses] = useState<ClassOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentTab, setCurrentTab] = useState("all");
-  const [newUser, setNewUser] = useState({
-    name: "",
-    email: "",
-    role: "STUDENT",
-    password: "",
-    confirmPassword: "",
-    classId: "",
-  });
-  const [faceRegistered, setFaceRegistered] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [isEditUserOpen, setIsEditUserOpen] = useState(false);
-  const [isDeleteUserOpen, setIsDeleteUserOpen] = useState(false);
-  const [createdUserId, setCreatedUserId] = useState<string | null>(null);
-  const [faceRegistrationStep, setFaceRegistrationStep] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [editFaceRegistered, setEditFaceRegistered] = useState(false);
+export function UsersManagement() {  const { toast } = useToast();  const [users, setUsers] = useState<User[]>([]);  const [classes, setClasses] = useState<ClassOption[]>([]);  const [isLoading, setIsLoading] = useState(true);  const [searchTerm, setSearchTerm] = useState("");  const [currentTab, setCurrentTab] = useState("all");  const [newUser, setNewUser] = useState({    name: "",    email: "",    role: "STUDENT",    password: "",    confirmPassword: "",    classId: "",  });  const [faceRegistered, setFaceRegistered] = useState(false);  const [qrCodeGenerated, setQrCodeGenerated] = useState(false);  const [qrCodeData, setQrCodeData] = useState("");  const [selectedUser, setSelectedUser] = useState<User | null>(null);  const [isAddUserOpen, setIsAddUserOpen] = useState(false);  const [isEditUserOpen, setIsEditUserOpen] = useState(false);  const [isDeleteUserOpen, setIsDeleteUserOpen] = useState(false);  const [createdUserId, setCreatedUserId] = useState<string | null>(null);  const [faceRegistrationStep, setFaceRegistrationStep] = useState(false);  const [showPassword, setShowPassword] = useState(false);  const [showConfirmPassword, setShowConfirmPassword] = useState(false);  const [editFaceRegistered, setEditFaceRegistered] = useState(false);
 
   // Fetch users and classes from the database
   useEffect(() => {
@@ -167,11 +145,11 @@ export function UsersManagement() {
       }
 
       // If we're in the face registration step and no face was registered, show a warning
-      if (faceRegistrationStep && !faceRegistered) {
+      if (faceRegistrationStep && !faceRegistered && !qrCodeGenerated) {
         toast({
           variant: "destructive",
           title: "Warning",
-          description: "Face not registered. User will be created without facial recognition.",
+          description: "Face and QR code not registered. User will be created without biometric authentication.",
         });
       }
 
@@ -196,25 +174,42 @@ export function UsersManagement() {
         const data = await response.json();
         setCreatedUserId(data.user.id);
         
+        // Generate QR code for the user
+        try {
+          const qrResponse = await fetch('/api/auth/generate-qr', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ userId: data.user.id }),
+          });
+          
+          if (qrResponse.ok) {
+            const qrData = await qrResponse.json();
+            setQrCodeData(qrData.qrCodeData);
+            setQrCodeGenerated(true);
+          }
+        } catch (qrError) {
+          console.error('Error generating QR code:', qrError);
+          toast({
+            variant: "destructive",
+            title: "Warning",
+            description: "Failed to generate QR code. User will be created without QR code for authentication.",
+          });
+        }
+        
         // If facial recognition is to be set up, go to the next step
         setFaceRegistrationStep(true);
         return;
       }
 
-      // Otherwise, we've already created the user and possibly registered the face
-      // Refresh the users list to include the new user
-      try {
-        const refreshResponse = await fetch('/api/users');
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          setUsers(refreshData.users);
-        }
-      } catch (refreshError) {
-        console.error('Error refreshing users:', refreshError);
-      }
+      // If we're here, it means we're completing registration after face setup
+      toast({
+        title: "Success",
+        description: `User ${newUser.name} created successfully.`,
+      });
 
-      // Reset the form
-      setIsAddUserOpen(false);
+      // Reset form and close dialog
       setNewUser({
         name: "",
         email: "",
@@ -223,22 +218,25 @@ export function UsersManagement() {
         confirmPassword: "",
         classId: "",
       });
-      setFaceRegistered(false);
       setFaceRegistrationStep(false);
       setCreatedUserId(null);
-      setShowPassword(false);
-      setShowConfirmPassword(false);
-
-      toast({
-        title: "Success",
-        description: "User added successfully",
-      });
+      setFaceRegistered(false);
+      setQrCodeGenerated(false);
+      setQrCodeData("");
+      setIsAddUserOpen(false);
+      
+      // Refresh the user list
+      const usersResponse = await fetch('/api/users');
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json();
+        setUsers(usersData.users);
+      }
     } catch (error) {
       console.error('Error creating user:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to add user",
+        description: error instanceof Error ? error.message : "Failed to create user",
       });
     }
   };
@@ -327,6 +325,22 @@ export function UsersManagement() {
     }
   };
 
+  const handleEditClick = async (user: User) => {
+    setSelectedUser(user);
+    setIsEditUserOpen(true);
+    
+    // Fetch the latest user data including QR code
+    try {
+      const response = await fetch(`/api/users/${user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedUser(data.user);
+      }
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -344,19 +358,24 @@ export function UsersManagement() {
               Add User
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
+              <DialogTitle>{faceRegistrationStep ? "Complete User Setup" : "Add New User"}</DialogTitle>
               <DialogDescription>
-                Create a new user account and add them to the system
+                {faceRegistrationStep ? "Complete the following steps to finish setting up the user." : "Fill out the form below to create a new user."}
               </DialogDescription>
             </DialogHeader>
             
-            <Tabs defaultValue="details" className="mt-4">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="details">User Details</TabsTrigger>
-                <TabsTrigger value="face" disabled={newUser.name === ""}>
-                  Facial Recognition
+            <Tabs defaultValue={faceRegistrationStep ? "qrcode" : "details"}>
+              <TabsList className="grid grid-cols-3 mb-4">
+                <TabsTrigger value="details" disabled={faceRegistrationStep}>
+                  User Details
+                </TabsTrigger>
+                <TabsTrigger value="qrcode" disabled={!createdUserId}>
+                  QR Code
+                </TabsTrigger>
+                <TabsTrigger value="face" disabled={!createdUserId}>
+                  Face Recognition
                 </TabsTrigger>
               </TabsList>
               
@@ -379,14 +398,14 @@ export function UsersManagement() {
                       type="email"
                       value={newUser.email}
                       onChange={e => setNewUser({...newUser, email: e.target.value})}
-                      placeholder="Enter email address" 
+                      placeholder="Enter email" 
                     />
                   </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="role">Role</Label>
-                    <Select 
-                      value={newUser.role} 
+                    <Select
+                      value={newUser.role}
                       onValueChange={value => setNewUser({...newUser, role: value})}
                     >
                       <SelectTrigger>
@@ -483,6 +502,79 @@ export function UsersManagement() {
                 </div>
               </TabsContent>
               
+              <TabsContent value="qrcode">
+                {createdUserId ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>User QR Code</CardTitle>
+                      <CardDescription>
+                        Generate and download the user's unique QR code for authentication
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {qrCodeGenerated && qrCodeData ? (
+                        <QRCodeGenerator 
+                          qrCodeData={qrCodeData}
+                          userName={newUser.name}
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                          <QrCode className="h-16 w-16 text-primary/30" />
+                          <p className="text-muted-foreground">QR code not yet generated</p>
+                          <Button 
+                            onClick={async () => {
+                              try {
+                                const qrResponse = await fetch('/api/auth/generate-qr', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({ userId: createdUserId }),
+                                });
+                                
+                                if (qrResponse.ok) {
+                                  const qrData = await qrResponse.json();
+                                  setQrCodeData(qrData.qrCodeData);
+                                  setQrCodeGenerated(true);
+                                  toast({
+                                    title: "Success",
+                                    description: "QR code generated successfully",
+                                  });
+                                } else {
+                                  throw new Error('Failed to generate QR code');
+                                }
+                              } catch (error) {
+                                console.error('Error:', error);
+                                toast({
+                                  variant: "destructive",
+                                  title: "Error",
+                                  description: "Failed to generate QR code. Please try again.",
+                                });
+                              }
+                            }}
+                          >
+                            Generate QR Code
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                    <CardFooter className="justify-between">
+                      <div>
+                        {qrCodeGenerated ? (
+                          <p className="text-sm text-green-500">QR code generated successfully!</p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">QR code not yet generated</p>
+                        )}
+                      </div>
+                    </CardFooter>
+                  </Card>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-muted-foreground">Please create the user first before generating a QR code</p>
+                  </div>
+                )}
+              </TabsContent>
+              
               <TabsContent value="face">
                 {createdUserId ? (
                   <Card>
@@ -523,6 +615,8 @@ export function UsersManagement() {
                 setFaceRegistrationStep(false);
                 setCreatedUserId(null);
                 setFaceRegistered(false);
+                setQrCodeGenerated(false);
+                setQrCodeData("");
               }}>
                 Cancel
               </Button>
@@ -586,12 +680,11 @@ export function UsersManagement() {
                   <TableCell className="flex justify-end gap-2">
                     <Dialog open={isEditUserOpen && selectedUser?.id === user.id} onOpenChange={(open) => {
                       setIsEditUserOpen(open);
-                      if (open) setSelectedUser(user);
+                      if (open) handleEditClick(user);
                     }}>
                       <DialogTrigger asChild>
                         <Button variant="ghost" size="icon" onClick={() => {
-                          setSelectedUser(user);
-                          setIsEditUserOpen(true);
+                          handleEditClick(user);
                         }}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -719,8 +812,15 @@ export function UsersManagement() {
                         )}
                         
                         <Tabs defaultValue="details" className="mt-6">
-                          <TabsList className="grid w-full grid-cols-2">
+                          <TabsList className="grid w-full grid-cols-3">
                             <TabsTrigger value="details">User Details</TabsTrigger>
+                            <TabsTrigger 
+                              id="qrcode-tab"
+                              value="qrcode"
+                              disabled={!selectedUser || !selectedUser.id}
+                            >
+                              QR Code
+                            </TabsTrigger>
                             <TabsTrigger 
                               id="facial-recognition-tab"
                               value="facial-recognition"
@@ -732,6 +832,111 @@ export function UsersManagement() {
 
                           <TabsContent value="details">
                             {/* Details content is now handled above */}
+                          </TabsContent>
+
+                          <TabsContent value="qrcode">
+                            {selectedUser && selectedUser.id && (
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle>User QR Code</CardTitle>
+                                  <CardDescription>
+                                    View or generate QR code for this user
+                                  </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                  {selectedUser.qrCode ? (
+                                    <QRCodeGenerator 
+                                      qrCodeData={selectedUser.qrCode}
+                                      userName={selectedUser.name}
+                                    />
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                                      <QrCode className="h-16 w-16 text-primary/30" />
+                                      <p className="text-muted-foreground">No QR code available for this user</p>
+                                      <Button 
+                                        onClick={async () => {
+                                          try {
+                                            const qrResponse = await fetch('/api/auth/generate-qr', {
+                                              method: 'POST',
+                                              headers: {
+                                                'Content-Type': 'application/json',
+                                              },
+                                              body: JSON.stringify({ userId: selectedUser.id }),
+                                            });
+                                            
+                                            if (qrResponse.ok) {
+                                              const qrData = await qrResponse.json();
+                                              setSelectedUser({
+                                                ...selectedUser,
+                                                qrCode: qrData.qrCodeData
+                                              });
+                                              toast({
+                                                title: "Success",
+                                                description: "QR code generated successfully",
+                                              });
+                                            } else {
+                                              throw new Error('Failed to generate QR code');
+                                            }
+                                          } catch (error) {
+                                            console.error('Error:', error);
+                                            toast({
+                                              variant: "destructive",
+                                              title: "Error",
+                                              description: "Failed to generate QR code. Please try again.",
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        Generate QR Code
+                                      </Button>
+                                    </div>
+                                  )}
+                                </CardContent>
+                                {selectedUser.qrCode && (
+                                  <CardFooter className="justify-between">
+                                    <p className="text-sm text-green-500">QR code available</p>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={async () => {
+                                        try {
+                                          const qrResponse = await fetch('/api/auth/generate-qr', {
+                                            method: 'POST',
+                                            headers: {
+                                              'Content-Type': 'application/json',
+                                            },
+                                            body: JSON.stringify({ userId: selectedUser.id }),
+                                          });
+                                          
+                                          if (qrResponse.ok) {
+                                            const qrData = await qrResponse.json();
+                                            setSelectedUser({
+                                              ...selectedUser,
+                                              qrCode: qrData.qrCodeData
+                                            });
+                                            toast({
+                                              title: "Success",
+                                              description: "QR code regenerated successfully",
+                                            });
+                                          } else {
+                                            throw new Error('Failed to regenerate QR code');
+                                          }
+                                        } catch (error) {
+                                          console.error('Error:', error);
+                                          toast({
+                                            variant: "destructive",
+                                            title: "Error",
+                                            description: "Failed to regenerate QR code. Please try again.",
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      Regenerate QR Code
+                                    </Button>
+                                  </CardFooter>
+                                )}
+                              </Card>
+                            )}
                           </TabsContent>
 
                           <TabsContent value="facial-recognition">
