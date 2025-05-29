@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
-import { UserCheck, Calendar as CalendarIcon, Clock, Loader2 } from "lucide-react";
+import { UserCheck, Calendar as CalendarIcon, Clock, Loader2, GraduationCap } from "lucide-react";
 import { StudentAttendanceChart } from "./student-attendance-chart";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -34,6 +34,11 @@ interface Student {
     id: string;
     grade: number;
     section: string;
+    teacher?: {
+      id: string;
+      name: string;
+      email: string;
+    } | null;
   } | null;
 }
 
@@ -44,6 +49,7 @@ export function StudentOverview() {
   const [student, setStudent] = useState<Student | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceRecord[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null);
+  const [teacherAttendance, setTeacherAttendance] = useState<AttendanceRecord | null>(null);
   
   // Fetch the current student's data
   useEffect(() => {
@@ -65,7 +71,7 @@ export function StudentOverview() {
         
         // Use the first student for demo purposes
         const currentStudent = studentsData.users[0];
-        console.log('Current student:', currentStudent);
+        console.log('Current student with class data:', currentStudent);
         setStudent(currentStudent);
         
         // Fetch the student's attendance records
@@ -85,6 +91,29 @@ export function StudentOverview() {
         );
         
         setTodayAttendance(todayRecord || null);
+        
+        // Fetch teacher's attendance if student has a class with teacher
+        if (currentStudent.class && currentStudent.class.teacher) {
+          console.log('Found teacher info:', currentStudent.class.teacher);
+          try {
+            const teacherAttendanceResponse = await fetch(`/api/attendance?userId=${currentStudent.class.teacher.id}&date=${formattedToday}`);
+            if (teacherAttendanceResponse.ok) {
+              const teacherAttendanceData = await teacherAttendanceResponse.json();
+              console.log('Teacher attendance data:', teacherAttendanceData);
+              const teacherTodayRecord = teacherAttendanceData.attendance.find((record: AttendanceRecord) => 
+                record.date.startsWith(formattedToday)
+              );
+              console.log('Teacher today record:', teacherTodayRecord);
+              setTeacherAttendance(teacherTodayRecord || null);
+            } else {
+              console.log('Failed to fetch teacher attendance:', teacherAttendanceResponse.status);
+            }
+          } catch (teacherError) {
+            console.error('Error fetching teacher attendance:', teacherError);
+          }
+        } else {
+          console.log('No teacher found for student class:', currentStudent.class);
+        }
         
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -137,7 +166,7 @@ export function StudentOverview() {
         </p>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -159,6 +188,31 @@ export function StudentOverview() {
             </div>
             <p className="text-xs text-muted-foreground">
               {todayAttendance?.timeIn ? `Checked in at ${todayAttendance.timeIn}` : 'No check-in recorded'}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Teacher Status
+            </CardTitle>
+            <GraduationCap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${
+              teacherAttendance?.status === 'PRESENT' ? 'text-green-600' :
+              teacherAttendance?.status === 'ABSENT' ? 'text-red-600' :
+              teacherAttendance?.status === 'LATE' ? 'text-amber-600' :
+              'text-gray-500'
+            }`}>
+              {teacherAttendance?.status === 'PRESENT' ? 'Present' :
+               teacherAttendance?.status === 'ABSENT' ? 'Absent' :
+               teacherAttendance?.status === 'LATE' ? 'Late' :
+               'Not Marked'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {student?.class?.teacher ? student.class.teacher.name : 'No teacher assigned'}
             </p>
           </CardContent>
         </Card>
@@ -198,7 +252,7 @@ export function StudentOverview() {
             <CardTitle className="text-sm font-medium">
               Total Absences
             </CardTitle>
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{absentCount}</div>

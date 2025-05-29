@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { AttendanceService } from '@/lib/attendance-service';
 
 // Configure route as dynamic
 export const dynamic = 'force-dynamic';
@@ -32,11 +33,24 @@ export async function POST(request: Request) {
         );
       }
 
+      // Record attendance automatically for successful biometric login
+      let attendanceResult = null;
+      if (user.role === 'STUDENT' || user.role === 'TEACHER') {
+        try {
+          const attendanceService = AttendanceService.getInstance();
+          attendanceResult = await attendanceService.recordAttendanceOnLogin(user.id);
+        } catch (attendanceError) {
+          console.error('Error recording attendance:', attendanceError);
+          // Don't fail login if attendance recording fails
+        }
+      }
+
       // Both IDs match and user exists
       return NextResponse.json({
         valid: true,
         userId: faceUserId,
         message: 'Biometric verification successful',
+        attendance: attendanceResult
       });
     } else {
       // IDs don't match

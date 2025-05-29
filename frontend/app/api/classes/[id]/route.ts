@@ -13,7 +13,7 @@ interface Params {
 // GET /api/classes/[id] - Get a specific class
 export async function GET(request: Request, { params }: Params) {
   try {
-    const classEntity = await (prisma as any).class.findUnique({
+    const classEntity = await prisma.class.findUnique({
       where: { id: params.id },
       include: {
         teacher: {
@@ -58,7 +58,7 @@ export async function PUT(request: Request, { params }: Params) {
     }
 
     // Find the class to update
-    const existingClass = await (prisma as any).class.findUnique({
+    const existingClass = await prisma.class.findUnique({
       where: { id: params.id },
     });
 
@@ -70,7 +70,7 @@ export async function PUT(request: Request, { params }: Params) {
     }
 
     // Update the class
-    const updatedClass = await (prisma as any).class.update({
+    const updatedClass = await prisma.class.update({
       where: { id: params.id },
       data: {
         grade: parseInt(grade),
@@ -105,7 +105,7 @@ export async function PUT(request: Request, { params }: Params) {
 export async function DELETE(request: Request, { params }: Params) {
   try {
     // Check if class exists
-    const existingClass = await (prisma as any).class.findUnique({
+    const existingClass = await prisma.class.findUnique({
       where: { id: params.id },
     });
 
@@ -117,7 +117,7 @@ export async function DELETE(request: Request, { params }: Params) {
     }
 
     // Delete the class
-    await (prisma as any).class.delete({
+    await prisma.class.delete({
       where: { id: params.id },
     });
 

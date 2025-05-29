@@ -21,7 +21,17 @@ export async function GET(request: Request) {
     const users = await prisma.user.findMany({
       where,
       include: {
-        class: true,
+        class: {
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
       },
       orderBy: {
         createdAt: 'desc',
@@ -97,7 +107,17 @@ export async function POST(request: Request) {
     const user = await prisma.user.create({
       data: userData,
       include: {
-        class: true,
+        class: {
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        },
       },
     });
 

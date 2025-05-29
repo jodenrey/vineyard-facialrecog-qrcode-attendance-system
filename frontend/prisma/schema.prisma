@@ -19,7 +19,7 @@ model User {
   classId       String?      // For students to be assigned to a class
   class         Class?       @relation("StudentClass", fields: [classId], references: [id])
   teacherClasses Class[]     @relation("TeacherClasses")
-  attendances   Attendance[] // For students' attendance records
+  attendances   Attendance[] // For both students' and teachers' attendance records
   qrCode        String?      // QR Code data for authentication
   faceEmbedding FaceEmbedding?
   createdAt     DateTime     @default(now())
@@ -27,14 +27,27 @@ model User {
 }
 
 model Class {
-  id        String     @id @default(uuid())
-  grade     Int
-  section   String
-  teacherId String?
-  teacher   User?      @relation("TeacherClasses", fields: [teacherId], references: [id])
-  students  User[]     @relation("StudentClass")
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id          String     @id @default(uuid())
+  grade       Int
+  section     String
+  teacherId   String?
+  teacher     User?      @relation("TeacherClasses", fields: [teacherId], references: [id])
+  students    User[]     @relation("StudentClass")
+  schedule    Schedule?  // Class schedule based on grade
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Schedule {
+  id        String   @id @default(uuid())
+  classId   String   @unique
+  class     Class    @relation(fields: [classId], references: [id])
+  startTime String   // e.g., "07:30" for Grades 1-3, "12:35" for Grades 4-6
+  endTime   String   // e.g., "11:30" for Grades 1-3, "17:30" for Grades 4-6
+  timezone  String   @default("Asia/Manila") // Philippine time
+  daysOfWeek String @default("MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY") // Active days
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Attendance {
@@ -44,8 +57,11 @@ model Attendance {
   timeIn    String?
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+  classDate String?  // Format: "YYYY-MM-DD" for easier querying
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  @@unique([userId, classDate]) // Ensure one attendance record per user per day
 }
 
 model FaceEmbedding {

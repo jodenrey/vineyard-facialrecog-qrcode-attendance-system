@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AreaChart, Users, UserCheck, UserX, Loader2 } from "lucide-react";
+import { AreaChart, Users, UserCheck, UserX, Loader2, Clock } from "lucide-react";
 import { ClassAttendanceChart } from "./class-attendance-chart";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -42,6 +42,7 @@ export function TeacherOverview() {
   const [teacherClasses, setTeacherClasses] = useState<any[]>([]);
   const [classStudents, setClassStudents] = useState<any[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [teacherAttendance, setTeacherAttendance] = useState<AttendanceRecord | null>(null);
   const [attendanceStats, setAttendanceStats] = useState({
     totalStudents: 0,
     presentToday: 0,
@@ -76,6 +77,22 @@ export function TeacherOverview() {
         console.log("Current teacher data:", teacher); // Debug log
         setCurrentTeacher(teacher);
         
+        // Fetch teacher's own attendance for today
+        const today = new Date();
+        const formattedDate = format(today, 'yyyy-MM-dd');
+        try {
+          const teacherAttendanceResponse = await fetch(`/api/attendance?userId=${teacher.id}&date=${formattedDate}`);
+          if (teacherAttendanceResponse.ok) {
+            const teacherAttendanceData = await teacherAttendanceResponse.json();
+            const teacherTodayRecord = teacherAttendanceData.attendance.find((record: AttendanceRecord) => 
+              record.date.startsWith(formattedDate)
+            );
+            setTeacherAttendance(teacherTodayRecord || null);
+          }
+        } catch (teacherAttendanceError) {
+          console.error('Error fetching teacher attendance:', teacherAttendanceError);
+        }
+        
         // Fetch classes for this teacher
         const classesResponse = await fetch(`/api/classes?teacherId=${teacher.id}`);
         if (!classesResponse.ok) {
@@ -103,8 +120,6 @@ export function TeacherOverview() {
           setClassStudents(studentsInClass);
           
           // Fetch today's attendance records
-          const today = new Date();
-          const formattedDate = format(today, 'yyyy-MM-dd');
           const attendanceResponse = await fetch(`/api/attendance?classId=${classId}&date=${formattedDate}`);
           
           if (!attendanceResponse.ok) {
@@ -195,7 +210,32 @@ export function TeacherOverview() {
         </p>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              My Attendance
+            </CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${
+              teacherAttendance?.status === 'PRESENT' ? 'text-green-600' :
+              teacherAttendance?.status === 'ABSENT' ? 'text-red-600' :
+              teacherAttendance?.status === 'LATE' ? 'text-amber-600' :
+              'text-gray-500'
+            }`}>
+              {teacherAttendance?.status === 'PRESENT' ? 'Present' :
+               teacherAttendance?.status === 'ABSENT' ? 'Absent' :
+               teacherAttendance?.status === 'LATE' ? 'Late' :
+               'Not Marked'}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {teacherAttendance?.timeIn ? `Checked in at ${teacherAttendance.timeIn}` : 'No check-in recorded'}
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -206,7 +246,7 @@ export function TeacherOverview() {
           <CardContent>
             <div className="text-2xl font-bold">{attendanceStats.totalStudents}</div>
             <p className="text-xs text-muted-foreground">
-              {classDetails}
+              In my classes
             </p>
           </CardContent>
         </Card>

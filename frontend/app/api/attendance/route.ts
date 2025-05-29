@@ -32,7 +32,8 @@ export async function GET(request: Request) {
     }
     
     // If classId is provided, get attendance for all students in that class
-    if (classId) {
+    // Only apply classId filter if userId is not specified (to avoid conflicts)
+    if (classId && !userId) {
       // First get all students in the class
       const studentsInClass = await prisma.user.findMany({
         where: {
@@ -55,8 +56,10 @@ export async function GET(request: Request) {
       }
     }
     
+    console.log('Attendance filters:', filters); // Debug log
+    
     // Fetch attendance records
-    const attendanceRecords = await (prisma as any).attendance.findMany({
+    const attendanceRecords = await prisma.attendance.findMany({
       where: filters,
       include: {
         user: {
@@ -73,6 +76,8 @@ export async function GET(request: Request) {
         date: 'desc',
       },
     });
+    
+    console.log(`Found ${attendanceRecords.length} attendance records`); // Debug log
     
     return NextResponse.json({ 
       attendance: attendanceRecords
@@ -121,7 +126,7 @@ export async function POST(request: Request) {
     const endOfDay = new Date(attendanceDate);
     endOfDay.setHours(23, 59, 59, 999);
     
-    const existingRecord = await (prisma as any).attendance.findFirst({
+    const existingRecord = await prisma.attendance.findFirst({
       where: {
         userId,
         date: {
@@ -133,7 +138,7 @@ export async function POST(request: Request) {
     
     if (existingRecord) {
       // Update existing record
-      const updatedRecord = await (prisma as any).attendance.update({
+      const updatedRecord = await prisma.attendance.update({
         where: {
           id: existingRecord.id,
         },
@@ -161,7 +166,7 @@ export async function POST(request: Request) {
       });
     } else {
       // Create new record
-      const newRecord = await (prisma as any).attendance.create({
+      const newRecord = await prisma.attendance.create({
         data: {
           userId,
           date: attendanceDate,

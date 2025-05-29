@@ -38,9 +38,17 @@ export function LoginForm() {
       const data = await response.json();
       
       if (response.ok) {
+        // Show attendance status if available
+        let toastMessage = `${data.user.role.toLowerCase()} login successful`;
+        if (data.attendance && data.attendance.success) {
+          toastMessage += ` - ${data.attendance.message}`;
+        } else if (data.attendance && !data.attendance.success) {
+          toastMessage += ` - ${data.attendance.message}`;
+        }
+
         toast({
           title: "Success",
-          description: `${data.user.role.toLowerCase()} login successful`,
+          description: toastMessage,
         });
         
         // Redirect based on role
@@ -98,7 +106,7 @@ export function LoginForm() {
         const result = await response.json();
         
         if (response.ok && result.valid) {
-          completeBiometricLogin(result.userId);
+          completeBiometricLogin(result.userId, result.attendance);
         } else {
           toast({
             variant: "destructive",
@@ -133,7 +141,7 @@ export function LoginForm() {
     setBiometricStep('face');
   };
 
-  const completeBiometricLogin = async (userId: string) => {
+  const completeBiometricLogin = async (userId: string, attendanceResult?: any) => {
     try {
       // Get user data from API
       const response = await fetch(`/api/users/${userId}`);
@@ -148,9 +156,17 @@ export function LoginForm() {
         throw new Error('Invalid user data received from server');
       }
       
+      // Show attendance status if available
+      let toastMessage = `${userData.user.role.toLowerCase()} login successful via biometric authentication`;
+      if (attendanceResult && attendanceResult.success) {
+        toastMessage += ` - ${attendanceResult.message}`;
+      } else if (attendanceResult && !attendanceResult.success) {
+        toastMessage += ` - ${attendanceResult.message}`;
+      }
+      
       toast({
         title: "Success",
-        description: `${userData.user.role.toLowerCase()} login successful via biometric authentication`,
+        description: toastMessage,
       });
       
       // Redirect based on role
@@ -226,7 +242,7 @@ export function LoginForm() {
         </div>
       </TabsContent>
       
-      <TabsContent value="biometric" className="space-y-4">
+      <TabsContent value="biometric" className="space-y-6">
         <div className="bg-muted/50 p-3 rounded-md mb-4 text-sm text-center">
           <p className="font-medium mb-1">Two-Factor Biometric Authentication</p>
           <p className="text-muted-foreground">Complete both face recognition and QR code scan to login securely</p>

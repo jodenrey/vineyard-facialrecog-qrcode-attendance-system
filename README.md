@@ -1,6 +1,6 @@
 # Vineyard Academy Attendance System
 
-A modern, full-stack school attendance management system with facial recognition capabilities for teachers, students, and administrators.
+A modern, full-stack school attendance management system with facial recognition and qr code capabilities for teachers, students, and administrators.
 
 ![Vineyard Academy Logo](https://via.placeholder.com/150)
 
@@ -58,7 +58,8 @@ npm install
 # NEXT_PUBLIC_API_URL="http://localhost:8000"
 
 # Set up the database
-npx prisma migrate dev
+npx prisma migrate deploy
+npx prisma generate
 
 # Start the development server
 npm run dev
