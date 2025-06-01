@@ -6,16 +6,17 @@ import { hash } from 'bcrypt';
 export const dynamic = 'force-dynamic';
 
 interface Params {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // GET /api/users/[id] - Get a specific user
 export async function GET(request: Request, { params }: Params) {
   try {
+    const { id } = await params;
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         class: true,
       }
@@ -33,7 +34,7 @@ export async function GET(request: Request, { params }: Params) {
 
     return NextResponse.json({ user: userWithoutPassword });
   } catch (error) {
-    console.error(`Error fetching user ${params.id}:`, error);
+    console.error(`Error fetching user:`, error);
     return NextResponse.json(
       { message: 'Internal server error' },
       { status: 500 }
@@ -44,6 +45,7 @@ export async function GET(request: Request, { params }: Params) {
 // PUT /api/users/[id] - Update a user
 export async function PUT(request: Request, { params }: Params) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { name, email, role, password, classId, qrCode } = body;
 
@@ -57,7 +59,7 @@ export async function PUT(request: Request, { params }: Params) {
 
     // Find the user to update
     const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingUser) {
@@ -114,7 +116,7 @@ export async function PUT(request: Request, { params }: Params) {
 
     // Update the user
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data,
       include: {
         class: true,
@@ -129,7 +131,7 @@ export async function PUT(request: Request, { params }: Params) {
       user: userWithoutPassword,
     });
   } catch (error) {
-    console.error(`Error updating user ${params.id}:`, error);
+    console.error(`Error updating user:`, error);
     return NextResponse.json(
       { message: 'Internal server error' },
       { status: 500 }
@@ -140,9 +142,11 @@ export async function PUT(request: Request, { params }: Params) {
 // DELETE /api/users/[id] - Delete a user
 export async function DELETE(request: Request, { params }: Params) {
   try {
+    const { id } = await params;
+    
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingUser) {
@@ -152,16 +156,36 @@ export async function DELETE(request: Request, { params }: Params) {
       );
     }
 
-    // Delete the user
-    await prisma.user.delete({
-      where: { id: params.id },
+    // Delete related records first to avoid foreign key constraint violations
+    // Use a transaction to ensure all operations succeed or fail together
+    await prisma.$transaction(async (tx) => {
+      // Delete attendance records
+      await tx.attendance.deleteMany({
+        where: { userId: id },
+      });
+
+      // Delete face embedding if exists
+      await tx.faceEmbedding.deleteMany({
+        where: { userId: id },
+      });
+
+      // If user is a teacher, remove them from classes they teach
+      await tx.class.updateMany({
+        where: { teacherId: id },
+        data: { teacherId: null },
+      });
+
+      // Finally, delete the user
+      await tx.user.delete({
+        where: { id },
+      });
     });
 
     return NextResponse.json({
       message: 'User deleted successfully',
     });
   } catch (error) {
-    console.error(`Error deleting user ${params.id}:`, error);
+    console.error(`Error deleting user:`, error);
     return NextResponse.json(
       { message: 'Internal server error' },
       { status: 500 }

@@ -23,6 +23,7 @@ model User {
   qrCode        String?      // QR Code data for authentication
   faceEmbedding FaceEmbedding?
   createdAt     DateTime     @default(now())
+ 
   updatedAt     DateTime     @updatedAt
 }
 
